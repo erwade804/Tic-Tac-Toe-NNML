@@ -1,0 +1,300 @@
+import pygame
+import random
+
+
+WIDTH = 500
+HEIGHT = 500
+FRAMES_BETWEEN_GAMES = 120
+RANDOMRATE = .01
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+BLUE = (50, 150, 200)
+GREEN = (30, 180, 20)
+RED = (200, 50, 40)
+
+pygame.init()
+screen = pygame.display.set_mode([WIDTH, HEIGHT])
+clock = pygame.time.Clock()
+
+class Board:
+    board = [0,0,0,0,0,0,0,0,0] # 0 is open spot, 1 is x, 2 is o
+
+    def __init__(self):
+        self.lastPlayer = 1
+        self.board = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    def makeMove(self, loc):
+        if self.board[loc] == 0:
+            self.board[loc] = self.lastPlayer
+            if self.lastPlayer == 1:
+                self.lastPlayer = 2
+            else:
+                self.lastPlayer = 1
+        else:
+            print(loc, "was taken")
+
+    def checkState(self, states):
+        [a, b, c] = states
+        if self.board[a] == self.board[b] and self.board[b] == self.board[c] and self.board[a] != 0:
+            return self.board[a]
+        return 0
+
+    def checkBoard(self):
+        states = [[0, 1, 2],[3, 4, 5], [6, 7, 8],
+                  [0, 3, 6],[1, 4, 7],[2, 5, 8],
+                  [0, 4, 8],[2, 4, 6]]
+        for i in self.board:
+            if i == 0:
+                break
+        else:
+            return "tie"
+
+        for i in states:
+            if self.checkState(i) != 0:
+                if self.checkState(i) == 1:
+                    return "x"
+                return "o"
+        return ""
+
+    def resetBoard(self):
+        self.lastPlayer = 1
+        self.board = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    def draw(self):
+        xs = []
+        os = []
+        for i in range(len(self.board)):
+            if self.board[i] == 1:
+                xs.append(i)
+            elif self.board[i] == 2:
+                os.append(i)
+        for i in xs:
+            drawX(i%3, int(i/3))
+        for i in os:
+            drawO(i%3, int(i/3))
+
+    def getExclude(self):
+        exclude = []
+        for i in range(len(self.board)):
+            if self.board[i] != 0:
+                exclude.append(i)
+        return exclude
+
+
+class cluster:
+    currentGeneration = []
+    generationCap = 10
+
+    def __init__(self):
+        for i in range(self.generationCap):
+            self.currentGeneration.append(neuralNetwork())
+
+    def getNetworks(self):
+        return self.currentGeneration
+
+    def newGeneration(self): # get 4 best, make children, have two random ones
+        list = getWins(self)
+        """get first 4, then create babies, create two random, finished"""
+        firstFour = []
+        for i in range(4):
+            firstFour.append(list[i])
+
+        # 12,13,14,23,24,34,14,23
+        newGen = []
+        newGen.append(firstFour[0].createChild(firstFour[1])) # first 7 are best bets
+        newGen.append(firstFour[0].createChild(firstFour[2]))
+        newGen.append(firstFour[0].createChild(firstFour[3]))
+        newGen.append(firstFour[1].createChild(firstFour[2]))
+        newGen.append(firstFour[1].createChild(firstFour[3]))
+        newGen.append(firstFour[2].createChild(firstFour[3]))
+        newGen.append(firstFour[0].createChild(firstFour[3]))
+        newGen.append(firstFour[1].createChild(self.currentGeneration[9]))  # this one is a random mutation
+        # it is alright if these are the same, but
+        newGen.append(neuralNetwork()) # random for potential change
+        newGen.append(neuralNetwork()) # random for next generation's potential major shift
+        self.currentGeneration = newGen
+
+
+    def playGame(self):
+        games = []
+        players = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        random.shuffle(players)
+        for i in range(5):
+            games.append(Board())
+        teams = []
+        for i in range(int(len(players)/2)):
+            teams.append([players[i], players[i+5]])
+        for i in teams:
+            self.subGame(i)
+
+    def subGame(self, two):
+        random.shuffle(two)
+        [a, b] = two
+        newboard = Board()
+        player = 0
+        while newboard.checkBoard() == "":
+            player += 1
+            if player % 2 == 0:
+                newboard.makeMove(self.currentGeneration[a].getAnswer(newboard.board, newboard.getExclude()))
+            else:
+                newboard.makeMove(self.currentGeneration[b].getAnswer(newboard.board, newboard.getExclude()))
+        if player % 2 == 1 and newboard.checkBoard() != "tie":
+            self.currentGeneration[b].wins += 1
+        else:
+            self.currentGeneration[a].wins += 1
+
+
+class neuralNetwork:
+    weights = []
+    bias = []
+    wins = 0
+    def __init__(self): # 1 to 9 to 15 to 9
+        weights_1 = [1, 1, 1, 1, 1, 1, 1, 1, 1] #first layer 9
+        weights_2 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] #second layer 15
+        weights_3 = [1, 1, 1, 1, 1, 1, 1, 1, 1] #output layer 9
+        self.weights = [weights_1, weights_2, weights_3]
+        bias_1 = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        bias_2 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        bias_3 = [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        self.bias = [bias_1, bias_2, bias_3]
+        self.randomize()
+        self.wins = random.randint(1, 5)
+
+    def randomize(self):
+        for i in range(len(self.weights)):
+            for j in range(len(self.weights[i])):
+                self.weights[i][j] = random.randrange(-5,5)
+        for i in range(len(self.bias)):
+            for j in range(len(self.bias[i])):
+                self.bias[i][j] = random.randrange(-5, 5)
+
+    def getAnswer(self, input, exclude):
+        currentLayer = input
+        nextLayer = []
+        for i in range(len(self.weights)):
+            for j in range(len(self.weights[i])):
+                currentNode = 0
+                for k in range(len(currentLayer)):
+                    currentNode += self.weights[i][j] * currentLayer[k] + self.bias[i][j]
+                nextLayer.append(currentNode)
+            currentLayer = nextLayer
+            nextLayer = []
+
+        index = 0
+        value = float('-inf')
+        for i in range(len(currentLayer)):
+            if currentLayer[i] >= value:
+                if i not in exclude:
+                    index = i
+                    value = currentLayer[i]
+        return index
+
+    def createChild(self, other):
+        tempWeights = []
+        tempBias = []
+        for i in range(len(self.weights)):
+            tempWeights.append([])
+            tempBias.append([])
+            for j in range(len(self.weights[i])):
+                if random.randint(0, 1) == 0:
+                    tempWeights[i].append(self.weights[i][j])
+                else:
+                    tempWeights[i].append(other.weights[i][j])
+                if random.randint(0, 1) == 0:
+                    tempBias[i].append(self.bias[i][j])
+                else:
+                    tempBias[i].append(other.bias[i][j])
+        tempNetwork = neuralNetwork()
+        tempNetwork.weights = tempWeights
+        tempNetwork.bias = tempBias
+        return tempNetwork
+
+
+def getNetworkWins(a):
+    return -a.wins
+
+def getWins(cluster):
+    networks = cluster.getNetworks()
+    networks = sorted(networks, key=getNetworkWins)
+    return networks
+
+
+
+def getInput():
+    lastFrame = pygame.mouse.get_pressed()
+    pygame.event.get()
+    newFrame = pygame.mouse.get_pressed()
+    if lastFrame[0] != newFrame[0] and newFrame[0] != 0:
+        mouseX, mouseY = pygame.mouse.get_pos()
+        mouseX /= WIDTH/3
+        mouseY /= WIDTH/3
+        square = min(int(mouseX), 2) + min(int(mouseY)*3, 6)
+        if mouseX > 3:
+            return
+        playerBoard.makeMove(square)
+        playerBoard.checkBoard()
+
+def drawO(x, y):
+    wid = WIDTH/6
+    x = 2*x + 1
+    x *= wid
+    high = HEIGHT/6
+    y = 2*y + 1
+    y *= high
+    x = int(x)
+    y = int(y)
+    pygame.draw.circle(screen, RED, (x, y), int(WIDTH/7), 12)
+
+def drawX(x, y):
+    wid = WIDTH / 6
+    x = 2 * x + 1
+    x *= wid
+    high = HEIGHT / 6
+    y = 2 * y + 1
+    y *= high
+    x = int(x)
+    y = int(y)
+    pygame.draw.line(screen, BLUE, (x-WIDTH/7, y-HEIGHT/7), (x+WIDTH/7, y+HEIGHT/7), 17)
+    pygame.draw.line(screen, BLUE, (x-WIDTH/7, y+HEIGHT/7), (x+WIDTH/7, y-HEIGHT/7), 17)
+
+def drawBoard():
+    clock.tick(60)
+    screen.fill(WHITE)
+    pygame.draw.line(screen, BLACK, (WIDTH/3, 0), (WIDTH/3, HEIGHT), 4)
+    pygame.draw.line(screen, BLACK, (2*WIDTH / 3, 0), (2*WIDTH / 3, HEIGHT), 4)
+    pygame.draw.line(screen, BLACK, (WIDTH, HEIGHT/3), (0, HEIGHT/3), 4)
+    pygame.draw.line(screen, BLACK, (0, 2*HEIGHT/3), (WIDTH, 2*HEIGHT/3), 4)
+
+
+AI = cluster()
+#b.playGame()
+a = AI.currentGeneration[0]
+playerBoard = Board()
+playerBoardStop = -1 #frames
+while not pygame.key.get_pressed()[pygame.K_ESCAPE]:
+    pygame.event.get()
+    drawBoard()
+    if playerBoardStop == -1:  # all inputs to playerBoard
+        interupt = playerBoard.board
+        getInput()
+        if playerBoard.board != interupt:
+            AI.playGame()
+        state = playerBoard.checkBoard()
+        if state != "":
+            playerBoardStop = FRAMES_BETWEEN_GAMES
+        if playerBoard.lastPlayer == 2 and playerBoardStop == -1:
+            playerBoard.makeMove(a.getAnswer(playerBoard.board, playerBoard.getExclude()))
+            state = playerBoard.checkBoard()
+            AI.playGame()
+            if state != "":
+                playerBoardStop = FRAMES_BETWEEN_GAMES
+    if playerBoardStop == 0:  # this will only trigger when the game is won
+        playerBoard.resetBoard()
+        AI.newGeneration()
+        a = AI.currentGeneration[0]
+    playerBoardStop = max(-1, playerBoardStop - 1)
+    playerBoard.draw()
+    pygame.display.flip()
+
+pygame.quit()
